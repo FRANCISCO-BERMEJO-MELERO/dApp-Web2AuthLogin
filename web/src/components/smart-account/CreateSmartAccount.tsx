@@ -1,54 +1,72 @@
 import { useSmartAccount } from "../../hooks/useSmartAccount";
-import { useBundler } from "../../hooks/useBundler";
-import { LoadingView } from "./LoadingView";
 import { AccountCreatedView } from "./AccountCreatedView";
-import { DeployAccountView } from "./DeployAccountView";
+import { useAccount } from "wagmi";
 
 interface CreateSmartAccountProps {
     userId: string;
 }
 
+const LoadingView = () => (
+    <div className="glass-panel p-12 rounded-[2rem] max-w-md w-full mx-auto text-center space-y-8 animate-fade-in border border-white/10 shadow-2xl shadow-black/20">
+        <div className="flex justify-center relative">
+            <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse-soft"></div>
+            <svg className="animate-spin h-14 w-14 text-blue-400 relative z-10" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-100" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+        <div className="space-y-3">
+            <h3 className="text-2xl font-bold text-white tracking-tight">Initializing Account...</h3>
+            <p className="text-slate-400 text-base">Please wait while we set up your smart account.</p>
+        </div>
+    </div>
+);
+
+interface DeployAccountViewProps {
+    smartAccountAddress: string;
+}
+
+const DeployAccountView = ({ smartAccountAddress }: DeployAccountViewProps) => (
+    <div className="space-y-8 animate-fade-in">
+        <div className="bg-slate-950/40 p-6 rounded-2xl border border-slate-800 relative group hover:border-slate-700 transition-colors">
+            <div className="absolute top-3 right-3 flex gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+                <div className="w-2.5 h-2.5 rounded-full bg-slate-700"></div>
+            </div>
+            <p className="text-xs text-slate-500 mb-3 font-bold uppercase tracking-wider">Predicted Address</p>
+            <p className="font-mono text-sm text-blue-400 break-all">{smartAccountAddress}</p>
+        </div>
+    </div>
+);
+
 export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
     const {
+        status,
         smartAccountAddress,
-        smartAccountInstance,
-        loading,
-        deploying,
-        error: accountError,
-        isDeployed,
+        error,
         txHash,
-        deployAccount,
-        webAuthnAccount,
+        userOpHash,
         createAccount,
+        sendTransaction,
     } = useSmartAccount(userId);
 
-    const {
-        sendUserOperation,
-        sending,
-        bundlerError,
-        userOpHash,
-    } = useBundler();
-
-    const handleDeployAccount = async () => {
-        await deployAccount();
-    };
+    const { address } = useAccount();
 
     const handleSendTransaction = async () => {
-        await sendUserOperation(smartAccountInstance, webAuthnAccount);
+        await sendTransaction();
     };
 
-    const error = accountError || bundlerError;
-
-    if (loading) {
+    if (status === 'loading') {
         return <LoadingView />;
     }
 
-    if (isDeployed) {
+    if (status === 'deployed' || status === 'sending_transaction' || status === 'transaction_sent') {
         return (
             <AccountCreatedView
                 smartAccountAddress={smartAccountAddress}
                 txHash={txHash}
-                sending={sending}
+                sending={status === 'sending_transaction'}
                 onSend={handleSendTransaction}
                 userOpHash={userOpHash}
             />
@@ -66,6 +84,9 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
                         ? "Your smart account address is ready. Deploy it to the network to start using it."
                         : "Create a new smart account secured by your passkey."}
                 </p>
+                <p className="text-slate-400 text-base leading-relaxed max-w-sm mx-auto">
+                    {address}
+                </p>
                 {!smartAccountAddress && (
                     <button
                         onClick={createAccount}
@@ -77,11 +98,9 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
             </div >
 
             <div className="space-y-6">
-                {smartAccountAddress && !isDeployed && (
+                {(status === 'ready_to_deploy' || status === 'deploying') && (
                     <DeployAccountView
                         smartAccountAddress={smartAccountAddress}
-                        deploying={deploying}
-                        onDeploy={handleDeployAccount}
                     />
                 )}
 

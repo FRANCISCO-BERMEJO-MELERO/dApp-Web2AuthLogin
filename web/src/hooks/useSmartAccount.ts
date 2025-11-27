@@ -3,23 +3,41 @@ import { publicClient } from "../client";
 import { createWebAuthnCredential, toWebAuthnAccount, type WebAuthnAccount } from "viem/account-abstraction";
 import { Implementation, toMetaMaskSmartAccount, type MetaMaskSmartAccount } from "@metamask/smart-accounts-kit";
 import { Address, PublicKey } from "ox";
-import { toHex, createWalletClient, http, keccak256, stringToHex } from "viem";
+import { toHex, createWalletClient, http, keccak256, stringToHex, parseEther } from "viem";
 import { sepolia as chain } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { getCredential, saveCredential } from "../utils/storage";
+import { createBundlerClient } from "viem/account-abstraction";
+import { getPimlicoGasPrice } from "../services/pimlico";
+
+export type SmartAccountStatus =
+    | 'idle'
+    | 'loading'
+    | 'ready_to_deploy'
+    | 'deploying'
+    | 'deployed'
+    | 'sending_transaction'
+    | 'transaction_sent'
+    | 'error';
 
 export const useSmartAccount = (userId: string) => {
+    const [status, setStatus] = useState<SmartAccountStatus>('idle');
     const [smartAccountAddress, setSmartAccountAddress] = useState<string>("");
     const [smartAccountInstance, setSmartAccountInstance] = useState<MetaMaskSmartAccount | null>(null);
-    const [loading, setLoading] = useState<boolean>(false);
-    const [deploying, setDeploying] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const [isDeployed, setIsDeployed] = useState<boolean>(false);
-    const [isCreated, setIsCreated] = useState<boolean>(false);
     const [txHash, setTxHash] = useState<string>("");
+    const [userOpHash, setUserOpHash] = useState<string>("");
     const [webAuthnAccount, setWebAuthnAccount] = useState<WebAuthnAccount | null>(null);
 
     const deploySalt = keccak256(stringToHex(userId));
+    const BUNDLER_RPC = import.meta.env.VITE_BUNDLER_RPC;
+    const DUMMY_RECIPIENT = import.meta.env.VITE_DUMMY_RECIPIENT;
+
+    // Helper to update status and error safely
+    const setStatusError = (msg: string) => {
+        setError(msg);
+        setStatus('error');
+    };
 
     const connectWithCredential = async (credential: any) => {
         try {
@@ -42,57 +60,49 @@ export const useSmartAccount = (userId: string) => {
                 signer: { webAuthnAccount: account, keyId: toHex(credential.id) },
             });
 
-            console.log("Smart account created:", smartAccount);
-            console.log("Smart account address:", await smartAccount.getAddress());
-            console.log("Smart account instance:", userId);
             const address = await smartAccount.getAddress();
-
-            const code = await publicClient.getCode({ address });
-            console.log("Smart account code:", code);
-            if (code === undefined || code === "0x") {
-                console.log("Smart account no desplegada aún");
-            } else {
-                console.log("Smart account ya existe");
-                setIsDeployed(true);
-            }
-
             setSmartAccountAddress(address);
             setSmartAccountInstance(smartAccount);
+
+            // Check deployment status
+            const code = await publicClient.getCode({ address });
+            if (code && code !== "0x") {
+                setStatus('deployed');
+            } else {
+                setStatus('ready_to_deploy');
+            }
         } catch (err: any) {
             console.error("Error connecting with credential:", err);
-            setError(err.message || "Error connecting with credential");
+            setStatusError(err.message || "Error connecting with credential");
         }
     };
 
+    // Initialize account on mount or userId change
     useEffect(() => {
+        // Reset state
+        setStatus('idle');
         setSmartAccountAddress("");
         setSmartAccountInstance(null);
-        setIsDeployed(false);
-        setIsCreated(false);
         setWebAuthnAccount(null);
         setTxHash("");
+        setUserOpHash("");
         setError(null);
 
-        if (!userId) {
-            setLoading(false);
-            return;
-        }
+        if (!userId) return;
 
         const initAccount = async () => {
             try {
-                setLoading(true);
-
+                setStatus('loading');
                 const credentialKey = `credential-${userId}`;
                 const savedCredential = getCredential(credentialKey);
 
                 if (savedCredential) {
                     await connectWithCredential(savedCredential);
+                } else {
+                    setStatus('idle'); // Ready to create
                 }
-
-                setLoading(false);
             } catch (err: any) {
-                setError(err.message || "Error initializing smart account");
-                setLoading(false);
+                setStatusError(err.message || "Error initializing smart account");
             }
         };
 
@@ -101,7 +111,7 @@ export const useSmartAccount = (userId: string) => {
 
     const createAccount = async () => {
         try {
-            setLoading(true);
+            setStatus('loading');
             setError(null);
 
             const credential = await createWebAuthnCredential({ name: `${userId}` });
@@ -109,36 +119,20 @@ export const useSmartAccount = (userId: string) => {
             saveCredential(credentialKey, credential);
 
             await connectWithCredential(credential);
-            setLoading(false);
         } catch (err: any) {
             console.error("Error creating smart account:", err);
-            // Don't set global error immediately if it's just a user cancellation or gesture issue, 
-            // let the UI handle it or retry. But for now we set it so UI can show it if needed.
-            // We re-throw so the caller (useEffect) knows it failed.
-            setError(err.message || "Error creating smart account");
-            setLoading(false);
-            throw err;
+            setStatusError(err.message || "Error creating smart account");
         }
     };
 
     const deployAccount = async () => {
         if (!smartAccountInstance) return;
 
-        // Safety check: ensure not already deployed
-        const address = await smartAccountInstance.getAddress();
-        const code = await publicClient.getCode({ address });
-        if (code && code !== "0x") {
-            console.log("Account already deployed, skipping deployment");
-            setIsDeployed(true);
-            return;
-        }
-
         try {
-            setDeploying(true);
+            setStatus('deploying');
             setError(null);
 
             const relayAccount = privateKeyToAccount(import.meta.env.VITE_RELAY_PRIVATE_KEY as `0x${string}`);
-
             const walletClient = createWalletClient({
                 account: relayAccount,
                 chain,
@@ -153,34 +147,65 @@ export const useSmartAccount = (userId: string) => {
             });
 
             setTxHash(hash);
-            console.log("Smart account deployed, txHash:", hash);
-            setDeploying(false);
-            setIsCreated(true);
-            setIsDeployed(true);
+            setStatus('deployed');
         } catch (err: any) {
-            setError(err.message || "Error deploying smart account");
-            setDeploying(false);
+            setStatusError(err.message || "Error deploying smart account");
         }
     };
 
+    const sendTransaction = async () => {
+        if (!smartAccountInstance || !webAuthnAccount) return;
+        if (!BUNDLER_RPC || !DUMMY_RECIPIENT) {
+            setStatusError("Missing environment variables for bundler");
+            return;
+        }
+
+        try {
+            setStatus('sending_transaction');
+            setError(null);
+
+            const bundlerClient = createBundlerClient({
+                client: publicClient,
+                transport: http(BUNDLER_RPC),
+            });
+
+            const { maxFeePerGas, maxPriorityFeePerGas } = await getPimlicoGasPrice();
+
+            const userOp = await bundlerClient.sendUserOperation({
+                account: smartAccountInstance,
+                calls: [
+                    {
+                        to: DUMMY_RECIPIENT,
+                        value: parseEther("0.0001"),
+                    },
+                ],
+                maxFeePerGas,
+                maxPriorityFeePerGas,
+            });
+
+            setUserOpHash(userOp);
+            setStatus('transaction_sent');
+        } catch (err: any) {
+            setStatusError(err.message || "Error sending user operation");
+        }
+    };
+
+    // Auto-deploy effect
     useEffect(() => {
-        if (smartAccountInstance && !isDeployed && !deploying && smartAccountAddress) {
-            console.log("Auto-deploying smart account...");
+        if (status === 'ready_to_deploy' && smartAccountInstance) {
             deployAccount();
         }
-    }, [smartAccountInstance, isDeployed, deploying, smartAccountAddress]);
+    }, [status, smartAccountInstance]);
 
     return {
+        status,
         smartAccountAddress,
         smartAccountInstance,
-        loading,
-        deploying,
         error,
-        isDeployed,
-        isCreated,
         txHash,
-        deployAccount,
-        webAuthnAccount,
+        userOpHash,
         createAccount,
+        deployAccount,
+        sendTransaction,
     };
 };

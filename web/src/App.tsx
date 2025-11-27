@@ -5,6 +5,7 @@ function App() {
   const { connect, isConnected, loading: connectLoading, error: connectError } = useWeb3AuthConnect();
   const { disconnect, loading: disconnectLoading } = useWeb3AuthDisconnect();
   const { userInfo } = useWeb3AuthUser();
+  console.log(userInfo);
 
   const loggedInView = (
     <div className="w-full max-w-5xl mx-auto px-4 py-12 animate-fade-in">
