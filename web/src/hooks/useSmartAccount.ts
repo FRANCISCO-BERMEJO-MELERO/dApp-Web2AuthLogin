@@ -46,8 +46,6 @@ export const useSmartAccount = (userId: string) => {
             console.log("Smart account address:", await smartAccount.getAddress());
             console.log("Smart account instance:", userId);
             const address = await smartAccount.getAddress();
-            setSmartAccountAddress(address);
-            setSmartAccountInstance(smartAccount);
 
             const code = await publicClient.getCode({ address });
             console.log("Smart account code:", code);
@@ -57,6 +55,9 @@ export const useSmartAccount = (userId: string) => {
                 console.log("Smart account ya existe");
                 setIsDeployed(true);
             }
+
+            setSmartAccountAddress(address);
+            setSmartAccountInstance(smartAccount);
         } catch (err: any) {
             console.error("Error connecting with credential:", err);
             setError(err.message || "Error connecting with credential");
@@ -111,13 +112,27 @@ export const useSmartAccount = (userId: string) => {
             setLoading(false);
         } catch (err: any) {
             console.error("Error creating smart account:", err);
+            // Don't set global error immediately if it's just a user cancellation or gesture issue, 
+            // let the UI handle it or retry. But for now we set it so UI can show it if needed.
+            // We re-throw so the caller (useEffect) knows it failed.
             setError(err.message || "Error creating smart account");
             setLoading(false);
+            throw err;
         }
     };
 
     const deployAccount = async () => {
         if (!smartAccountInstance) return;
+
+        // Safety check: ensure not already deployed
+        const address = await smartAccountInstance.getAddress();
+        const code = await publicClient.getCode({ address });
+        if (code && code !== "0x") {
+            console.log("Account already deployed, skipping deployment");
+            setIsDeployed(true);
+            return;
+        }
+
         try {
             setDeploying(true);
             setError(null);
@@ -147,6 +162,13 @@ export const useSmartAccount = (userId: string) => {
             setDeploying(false);
         }
     };
+
+    useEffect(() => {
+        if (smartAccountInstance && !isDeployed && !deploying && smartAccountAddress) {
+            console.log("Auto-deploying smart account...");
+            deployAccount();
+        }
+    }, [smartAccountInstance, isDeployed, deploying, smartAccountAddress]);
 
     return {
         smartAccountAddress,

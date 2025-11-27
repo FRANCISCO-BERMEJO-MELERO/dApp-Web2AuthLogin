@@ -3,7 +3,6 @@ import { useBundler } from "../../hooks/useBundler";
 import { LoadingView } from "./LoadingView";
 import { AccountCreatedView } from "./AccountCreatedView";
 import { DeployAccountView } from "./DeployAccountView";
-import { TransactionView } from "./TransactionView";
 
 interface CreateSmartAccountProps {
     userId: string;
@@ -17,7 +16,6 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
         deploying,
         error: accountError,
         isDeployed,
-        isCreated,
         txHash,
         deployAccount,
         webAuthnAccount,
@@ -45,8 +43,16 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
         return <LoadingView />;
     }
 
-    if (isCreated) {
-        return <AccountCreatedView smartAccountAddress={smartAccountAddress} txHash={txHash} />;
+    if (isDeployed) {
+        return (
+            <AccountCreatedView
+                smartAccountAddress={smartAccountAddress}
+                txHash={txHash}
+                sending={sending}
+                onSend={handleSendTransaction}
+                userOpHash={userOpHash}
+            />
+        );
     }
 
     return (
@@ -68,7 +74,7 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
                         Create Passkey
                     </button>
                 )}
-            </div>
+            </div >
 
             <div className="space-y-6">
                 {smartAccountAddress && !isDeployed && (
@@ -79,21 +85,12 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
                     />
                 )}
 
-                {isDeployed && (
-                    <TransactionView
-                        smartAccountAddress={smartAccountAddress}
-                        sending={sending}
-                        userOpHash={userOpHash}
-                        onSend={handleSendTransaction}
-                    />
-                )}
-
                 {error && (
                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm text-center animate-fade-in">
                         {error}
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 };
