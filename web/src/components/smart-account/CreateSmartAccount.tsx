@@ -1,6 +1,7 @@
 import { useSmartAccount } from "../../hooks/useSmartAccount";
-import { AccountCreatedView } from "./AccountCreatedView";
+// import { AccountCreatedView } from "./AccountCreatedView";
 import { useAccount } from "wagmi";
+
 
 interface CreateSmartAccountProps {
     userId: string;
@@ -61,17 +62,17 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
         return <LoadingView />;
     }
 
-    if (status === 'deployed' || status === 'sending_transaction' || status === 'transaction_sent') {
-        return (
-            <AccountCreatedView
-                smartAccountAddress={smartAccountAddress}
-                txHash={txHash}
-                sending={status === 'sending_transaction'}
-                onSend={handleSendTransaction}
-                userOpHash={userOpHash}
-            />
-        );
-    }
+    // if (status === 'deployed' || status === 'sending_transaction' || status === 'transaction_sent') {
+    //     return (
+    //         <AccountCreatedView
+    //             smartAccountAddress={smartAccountAddress}
+    //             txHash={txHash}
+    //             sending={status === 'sending_transaction'}
+    //             onSend={handleSendTransaction}
+    //             userOpHash={userOpHash}
+    //         />
+    //     );
+    // }
 
     return (
         <div className="glass-panel p-10 rounded-[2rem] max-w-lg w-full mx-auto space-y-10 border border-white/10 shadow-2xl shadow-black/20">
