@@ -1,4 +1,4 @@
-import { useWeb3AuthConnect, useWeb3AuthDisconnect, useWeb3AuthUser } from "@web3auth/modal/react";
+import { useWeb3AuthConnect, useWeb3AuthDisconnect, useWeb3AuthUser, useWeb3Auth } from "@web3auth/modal/react";
 import { CreateSmartAccount } from "./components/smart-account/CreateSmartAccount";
 
 function App() {
@@ -6,6 +6,8 @@ function App() {
   const { disconnect, loading: disconnectLoading } = useWeb3AuthDisconnect();
   const { userInfo } = useWeb3AuthUser();
   console.log(userInfo);
+
+  const { web3Auth } = useWeb3Auth();
 
   const loggedInView = (
     <div className="w-full max-w-5xl mx-auto px-4 py-12 animate-fade-in">

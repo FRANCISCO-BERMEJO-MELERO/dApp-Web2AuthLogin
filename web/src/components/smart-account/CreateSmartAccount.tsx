@@ -52,6 +52,7 @@ export const CreateSmartAccount = ({ userId }: CreateSmartAccountProps) => {
         sendTransaction,
     } = useSmartAccount(userId);
 
+    
     const { address } = useAccount();
 
     const handleSendTransaction = async () => {
